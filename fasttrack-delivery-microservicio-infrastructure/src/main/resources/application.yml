@@ -1,0 +1,53 @@
+spring:
+  application:
+    name: fasttrack-delivery-microservicio
+  main:
+    web-application-type: reactive
+
+  r2dbc:
+    url: ${DB_URL:r2dbc:postgresql://localhost:5432/fasttrack}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+    pool:
+      initial-size: 5
+      max-size: 20
+      max-idle-time: 30m
+      max-acquire-time: 5s
+      validation-query: SELECT 1
+
+  # Ejecuta schema.sql y data.sql de src/main/resources en cada arranque (ambos son idempotentes).
+  # Con una BBDD no embebida el valor por defecto es "never", de ahí el "always".
+  sql:
+    init:
+      mode: always
+
+  # El contrato (swagger.yml) declara el servidor como http://localhost:8080/api/v1,
+  # pero las rutas generadas son /pedidos y /restaurantes, así que el prefijo se pone aquí.
+  webflux:
+    base-path: /api/v1
+
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+server:
+  port: 8080
+  shutdown: graceful
+  netty:
+    connection-timeout: 5s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
+  level:
+    org.javierGomez18: DEBUG
+    # SQL que lanza Spring Data R2DBC; útil mientras se aprende, quitar en producción
+    org.springframework.r2dbc.core: DEBUG

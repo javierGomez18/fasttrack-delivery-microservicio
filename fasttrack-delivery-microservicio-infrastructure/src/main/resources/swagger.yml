@@ -1,0 +1,515 @@
+openapi: 3.0.3
+info:
+  title: fasttrack-delivery-microservicio
+  description: Plataforma de pedidos a domicilio — gestión de pedidos y seguimiento en tiempo real
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080/{basepath}
+    variables:
+      basepath:
+        default: api/v1
+tags:
+  - name: Restaurantes
+    description: Operaciones relacionadas con restaurantes y su menú
+  - name: Pedidos
+    description: Operaciones relacionadas con pedidos, su ciclo de vida y su seguimiento en tiempo real
+paths:
+  /restaurantes:
+    post:
+      tags:
+        - Restaurantes
+      summary: Dar de alta un restaurante
+      description: Crea un nuevo restaurante
+      operationId: createRestaurante
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RestauranteRQ'
+      responses:
+        '201':
+          description: Restaurante creado correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RestauranteRS'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        default:
+          $ref: '#/components/responses/Default'
+    get:
+      tags:
+        - Restaurantes
+      summary: Listar restaurantes activos
+      description: Consulta para recuperar todos los restaurantes con estado activo
+      operationId: findRestaurantesActivos
+      responses:
+        '200':
+          description: Lista de restaurantes activos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RestauranteRS'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        default:
+          $ref: '#/components/responses/Default'
+
+  /restaurantes/{idRestaurante}/menu:
+    get:
+      tags:
+        - Restaurantes
+      summary: Obtener el menú de un restaurante
+      description: Consulta para recuperar los productos del menú de un restaurante dado
+      operationId: findMenuByRestauranteId
+      parameters:
+        - name: idRestaurante
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: Identificador del restaurante
+      responses:
+        '200':
+          description: Lista de productos del menú (vacía si el restaurante no tiene productos)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProductoMenuRS'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        default:
+          $ref: '#/components/responses/Default'
+
+  /pedidos:
+    post:
+      tags:
+        - Pedidos
+      summary: Crear un pedido
+      description: Crea un pedido con sus líneas asociadas. El precio de cada línea y el total se calculan en el servidor a partir del precio vigente de cada producto, no se aceptan del cliente.
+      operationId: createPedido
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PedidoRQ'
+      responses:
+        '201':
+          description: Pedido creado correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PedidoRS'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: El restaurante o alguno de los productos referenciados no existe
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailRS'
+        '422':
+          description: El restaurante está inactivo, el pedido no tiene líneas, o algún producto no pertenece al restaurante indicado o no está disponible
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailRS'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        default:
+          $ref: '#/components/responses/Default'
+    get:
+      tags:
+        - Pedidos
+      summary: Listar pedidos de un cliente
+      description: Consulta para recuperar los pedidos asociados a un clienteId dado
+      operationId: findPedidosByClienteId
+      parameters:
+        - name: clienteId
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: Identificador del cliente
+      responses:
+        '200':
+          description: Lista de pedidos del cliente (vacía si no tiene pedidos)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PedidoRS'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        default:
+          $ref: '#/components/responses/Default'
+
+  /pedidos/{idPedido}:
+    get:
+      tags:
+        - Pedidos
+      summary: Consultar un pedido
+      description: Obtiene un pedido por su identificador
+      operationId: findPedidoById
+      parameters:
+        - name: idPedido
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: Identificador del pedido
+      responses:
+        '200':
+          description: Pedido encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PedidoRS'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        default:
+          $ref: '#/components/responses/Default'
+
+  /pedidos/{idPedido}/cancelar:
+    patch:
+      tags:
+        - Pedidos
+      summary: Cancelar un pedido
+      description: Cancela un pedido si su estado actual todavía lo permite (cualquier estado anterior a ENTREGADO)
+      operationId: cancelarPedido
+      parameters:
+        - name: idPedido
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: Identificador del pedido
+      responses:
+        '204':
+          description: Pedido cancelado correctamente (sin contenido)
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: El pedido no se puede cancelar en su estado actual (ya ENTREGADO o ya CANCELADO)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailRS'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        default:
+          $ref: '#/components/responses/Default'
+
+  /pedidos/{idPedido}/seguimiento:
+    get:
+      tags:
+        - Pedidos
+      summary: Seguimiento en tiempo real de un pedido (Server-Sent Events)
+      description: >-
+        Devuelve primero el historial de eventos ya persistidos del pedido y a continuación
+        sigue emitiendo los nuevos eventos que vayan llegando (alimentados por el consumidor
+        de Kafka) hasta que el pedido llegue a ENTREGADO o CANCELADO, momento en el que el
+        stream se cierra. El schema de la respuesta se declara como array (no como objeto
+        único) para que, con `reactive: true`, openapi-generator genere el método como
+        `Flux<EventoSeguimientoRS>` en lugar de `Mono<EventoSeguimientoRS>` — verificar este
+        comportamiento al generar el código, ya que depende de la versión del plugin.
+      operationId: seguimientoPedido
+      parameters:
+        - name: idPedido
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: Identificador del pedido
+      responses:
+        '200':
+          description: Stream de eventos de seguimiento del pedido
+          content:
+            text/event-stream:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EventoSeguimientoRS'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        default:
+          $ref: '#/components/responses/Default'
+
+components:
+  responses:
+    BadRequest:
+      description: Petición inválida (validación de campos)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetailRS'
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetailRS'
+    InternalServerError:
+      description: Error interno inesperado
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetailRS'
+    Default:
+      description: Error inesperado no contemplado explícitamente
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetailRS'
+
+  schemas:
+    CategoriaRestauranteEnum:
+      type: string
+      enum:
+        - HAMBURGUESERIA
+        - SUSHI
+        - PIZZERIA
+      description: Categoría del restaurante
+
+    EstadoPedidoEnum:
+      type: string
+      enum:
+        - PEDIDO_RECIBIDO
+        - EN_PREPARACION
+        - REPARTIDOR_ASIGNADO
+        - EN_REPARTO
+        - ENTREGADO
+        - CANCELADO
+      description: Estado del pedido dentro de su ciclo de vida. Se reutiliza también como tipo de EventoSeguimiento, ya que ambos comparten exactamente los mismos valores.
+
+    RestauranteRQ:
+      type: object
+      required:
+        - nombre
+        - categoria
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+          maxLength: 120
+        categoria:
+          $ref: '#/components/schemas/CategoriaRestauranteEnum'
+
+    RestauranteRS:
+      type: object
+      required:
+        - id
+        - nombre
+        - categoria
+        - activo
+      properties:
+        id:
+          type: integer
+          format: int64
+        nombre:
+          type: string
+        categoria:
+          $ref: '#/components/schemas/CategoriaRestauranteEnum'
+        activo:
+          type: boolean
+
+    ProductoMenuRS:
+      type: object
+      required:
+        - id
+        - restauranteId
+        - nombre
+        - precio
+        - disponible
+      properties:
+        id:
+          type: integer
+          format: int64
+        restauranteId:
+          type: integer
+          format: int64
+        nombre:
+          type: string
+        precio:
+          type: number
+          format: double
+          minimum: 0
+          exclusiveMinimum: true
+        disponible:
+          type: boolean
+
+    LineaPedidoRQ:
+      type: object
+      required:
+        - productoId
+        - cantidad
+      properties:
+        productoId:
+          type: integer
+          format: int64
+        cantidad:
+          type: integer
+          format: int32
+          minimum: 1
+
+    LineaPedidoRS:
+      type: object
+      required:
+        - id
+        - productoId
+        - cantidad
+        - precioUnitario
+      properties:
+        id:
+          type: integer
+          format: int64
+        productoId:
+          type: integer
+          format: int64
+        cantidad:
+          type: integer
+          format: int32
+        precioUnitario:
+          type: number
+          format: double
+          description: Precio del producto en el momento de crear el pedido (no cambia aunque el precio del producto cambie después)
+
+    PedidoRQ:
+      type: object
+      required:
+        - restauranteId
+        - clienteId
+        - lineas
+      properties:
+        restauranteId:
+          type: integer
+          format: int64
+        clienteId:
+          type: integer
+          format: int64
+        lineas:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/LineaPedidoRQ'
+
+    PedidoRS:
+      type: object
+      required:
+        - id
+        - restauranteId
+        - clienteId
+        - estado
+        - fechaCreacion
+        - total
+        - tiempoEstimadoMinutos
+        - lineas
+      properties:
+        id:
+          type: integer
+          format: int64
+        restauranteId:
+          type: integer
+          format: int64
+        clienteId:
+          type: integer
+          format: int64
+        estado:
+          $ref: '#/components/schemas/EstadoPedidoEnum'
+        fechaCreacion:
+          type: string
+          format: date-time
+          description: Fecha y hora de creación del pedido (YYYY-MM-DDTHH:mm:ss)
+        total:
+          type: number
+          format: double
+          description: Suma de precioUnitario * cantidad de todas las líneas
+        tiempoEstimadoMinutos:
+          type: integer
+          format: int32
+          description: Tiempo estimado de entrega en minutos, obtenido de un servicio externo (con valor de fallback si el servicio no responde a tiempo)
+        lineas:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineaPedidoRS'
+
+    EventoSeguimientoRS:
+      type: object
+      required:
+        - id
+        - pedidoId
+        - tipo
+        - timestamp
+      properties:
+        id:
+          type: integer
+          format: int64
+        pedidoId:
+          type: integer
+          format: int64
+        tipo:
+          $ref: '#/components/schemas/EstadoPedidoEnum'
+        timestamp:
+          type: string
+          format: date-time
+          description: Fecha y hora del evento (YYYY-MM-DDTHH:mm:ss)
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Datos adicionales libres del evento (ej. posición GPS simulada del repartidor)
+
+    ProblemDetailRS:
+      type: object
+      description: Respuesta de error conforme a RFC 7807 (Problem Details for HTTP APIs), con un campo timestamp como extensión propia.
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - instance
+        - timestamp
+      properties:
+        type:
+          type: string
+          format: uri
+          description: URI que identifica el tipo de error (ej. /errors/pedido-no-encontrado)
+        title:
+          type: string
+          description: Título breve y legible del error
+        status:
+          type: integer
+          format: int32
+          description: Código de estado HTTP asociado al error
+        detail:
+          type: string
+          description: Descripción detallada del error, específica de esta ocurrencia
+        instance:
+          type: string
+          format: uri
+          description: URI que identifica la instancia (petición) concreta que produjo el error
+        timestamp:
+          type: string
+          format: date-time
+          description: Marca de tiempo en la que ocurrió el error (YYYY-MM-DDTHH:mm:ss), extensión propia sobre el RFC 7807
